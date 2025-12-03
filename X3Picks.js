@@ -22,7 +22,7 @@ HaxballJS().then((HBInit) => {
     roomName: "🟣 X3 Thrivium (ELO + PICKS) 🟣",
     maxPlayers: 18,
     noPlayer: true,
-    public: false,
+    public: true,
     token: process.env.HB_TOKEN, // poné tu token en Fly
     geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
   });
@@ -802,7 +802,7 @@ loadVips();
 
 function sendPasswordToWebhook(password) {
     const message = {
-        content: `[🔒] La nueva contraseña de admin es: ${password}`
+        content: `🔒 La nueva contraseña de admin es: ${password}`
     };
 
     fetch(adminWebhookURL, {
