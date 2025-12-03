@@ -6,6 +6,7 @@ var room = HBInit({
     maxPlayers: 18,
     noPlayer: true,
     public: false,
+	token: "thr1.AAAAAGkvj9r7bv94nqk-PA.qMxEovhHvOQ"
     geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
 });
 
