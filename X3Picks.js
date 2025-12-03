@@ -23,7 +23,7 @@ HaxballJS().then((HBInit) => {
     maxPlayers: 18,
     noPlayer: true,
     public: true,
-    token: process.env.HB_TOKEN, // poné tu token en Fly
+    token: "thr1.AAAAAGkvsMGrsSdQywRxhg.UdDc5-LQsbI", // poné tu token en Fly
     geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
   });
 
