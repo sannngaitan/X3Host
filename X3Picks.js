@@ -303,6 +303,8 @@ const VOTES_REQUIRED = 2;
 const VOTE_WINDOW_MS = 30000;
 const PAUSE_TIME_MS  = 30000;
 
+let autoStartTimeout = null;
+
 const winPoints = 3;
 const losePoints = -4;
 const cleanSheetPoints = 6;	
@@ -1392,6 +1394,25 @@ room.onPlayerJoin = function(player) {
         return;
     }
 
+	const players = room.getPlayerList();
+
+    // Si este es el PRIMER jugador de la sala
+    if (players.length === 1) {
+        // Si ya hay un timeout programado, no hacemos nada
+        if (autoStartTimeout) return;
+
+        autoStartTimeout = setTimeout(() => {
+            autoStartTimeout = null;
+
+            const currentPlayers = room.getPlayerList();
+
+            // Verificamos que siga habiendo gente
+            if (currentPlayers.length > 0 && room.getScores() === null) {
+                room.startGame();
+            }
+        }, 3000); // 3 segundos
+    }
+
 	if (vips[pAuth]) {
         const vipData = vips[pAuth];
         const name = player.name;
@@ -1543,6 +1564,19 @@ room.onPlayerLeave = function(player) {
             if(player.id === blueGK.id){
                 identifyGoalkeepers(2);
             }
+        }
+    }
+
+	if (players.length === 0) {
+        // Cancelamos auto start si estaba programado
+        if (autoStartTimeout) {
+            clearTimeout(autoStartTimeout);
+            autoStartTimeout = null;
+        }
+
+        // Si hay un partido en juego, lo paramos
+        if (room.getScores() !== null) {
+            room.stopGame();
         }
     }
     
