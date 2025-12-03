@@ -1,0 +1,11 @@
+{
+  "name": "x3-host",
+  "version": "1.0.0",
+  "main": "X3Picks.js",
+  "scripts": {
+    "start": "node X3Picks.js"
+  },
+  "dependencies": {
+    "ws": "^8.15.1"
+  }
+}
