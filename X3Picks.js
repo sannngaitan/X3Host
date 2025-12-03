@@ -492,19 +492,31 @@ function cleanExpiredTempBans() {
 }
 
 // Agregar un ban temporal por AUTH
-function addTempBanAuth(auth, durationMs, reason, byAdmin) {
-    const now = Date.now();
+function addTempBanAuth(auth, durationMs, reason, byAdmin, playerName) {
+    const now       = Date.now();
     const expiresAt = now + durationMs;
 
     const existing = tempBans.auths.find(b => b.auth === auth);
     if (existing) {
         existing.expiresAt = expiresAt;
-        existing.reason = reason;
-        existing.by = byAdmin;
+        existing.reason    = reason;
+        existing.by        = byAdmin;
+        existing.name      = playerName || existing.name || "Desconocido";
     } else {
-        tempBans.auths.push({ auth, expiresAt, reason, by: byAdmin });
+        tempBans.auths.push({
+            auth,
+            name: playerName || "Desconocido",
+            expiresAt,
+            reason,
+            by: byAdmin || "Sistema"
+        });
     }
+
     saveTempBans();
+}
+
+function saveTempBans() {
+    localStorage.setItem("tempBans", JSON.stringify(tempBans));
 }
 
 function formatRemainingTime(expiresAt) {
@@ -1273,8 +1285,10 @@ function startPostGamePicks(winningTeam, losingTeam) {
     // Si hay menos de 6 jugadores no AFK → sistema viejo + AUTOSTART
     if (totalNonAfk < MIN_PLAYERS_FOR_PICKS) {
         moveSpec(losingTeam);
+        setTimeout(() => {
         moveJug(losingTeam);
-
+        }, 500);
+		
         setTimeout(() => {
             const scoresNow = room.getScores();
             if (!scoresNow) {
@@ -1374,13 +1388,13 @@ room.onPlayerJoin = function(player) {
     // Limpiamos expirados
     cleanExpiredTempBans();
 
-    const ban = tempBans.auths.find(b => b.auth === p.auth);
+    const ban = tempBans.auths.find(b => b.auth === player.auth);
 
     if (ban) {
         const restanteMs = ban.expiresAt - Date.now();
         const restanteMin = Math.max(1, Math.round(restanteMs / 60000));
         room.kickPlayer(
-            p.id,
+            player.id,
             `Sigues temporalmente baneado. Motivo: ${ban.reason}. Tiempo restante aprox: ${restanteMin} min.`,
             true
         );
@@ -1394,10 +1408,10 @@ room.onPlayerJoin = function(player) {
         return;
     }
 
-	const players = room.getPlayerList();
+	const jugadores = room.getPlayerList();
 
     // Si este es el PRIMER jugador de la sala
-    if (players.length === 1) {
+    if (jugadores.length === 1) {
         // Si ya hay un timeout programado, no hacemos nada
         if (autoStartTimeout) return;
 
@@ -1567,7 +1581,9 @@ room.onPlayerLeave = function(player) {
         }
     }
 
-	if (players.length === 0) {
+	const jugadores = room.getPlayerList();
+
+	if (jugadores.length === 0) {
         // Cancelamos auto start si estaba programado
         if (autoStartTimeout) {
             clearTimeout(autoStartTimeout);
@@ -2729,8 +2745,10 @@ if (message.startsWith("!rank")) {
     }
 
 
-    if (message.startsWith("!ban")) {
-    const pAuth = player.auth; // asumiendo que lo usás para loggedAdmins
+if (message.startsWith("!ban")) {
+    const pAuth = players[player.id]; // auth del admin que ejecuta
+    const adminName = player.name;
+
     if (isAdmin(player) || loggedAdmins.includes(pAuth)) {
         const args = message.split(" ").slice(1); 
         // args[0] = @usuario, args[1] = duración, resto = razón
@@ -2781,7 +2799,10 @@ if (message.startsWith("!rank")) {
             return false;
         }
 
-        if (!target.auth) {
+        // Intentamos primero con target.auth, si no, con el mapa players
+        const targetAuth = target.auth || players[target.id];
+
+        if (!targetAuth) {
             room.sendAnnouncement(
                 "⚠️ No se pudo obtener el AUTH del jugador.",
                 player.id,
@@ -2793,17 +2814,18 @@ if (message.startsWith("!rank")) {
         }
 
         // Registramos ban temporal por AUTH
-        addTempBanAuth(target.auth, durationMs, reason);
+        // (si tu addTempBanAuth soporta 'byAdmin', acá podrías pasar adminName también)
+        addTempBanAuth(targetAuth, durationMs, reason, adminName, target.name);
 
         // Kick inmediato
         room.kickPlayer(
             target.id,
-            `Has sido temporalmente baneado por ${reason}. Duración: ${durationArg}`,
-            true
+            `Has sido temporalmente baneado por ${reason}.\nDuración: ${durationArg}.\nBaneado por: ${adminName}.`,
+            false
         );
 
         room.sendAnnouncement(
-            `✅ Jugador ${target.name} baneado temporalmente por ${durationArg}. Razón: ${reason}`,
+            `✅ Jugador ${target.name} baneado temporalmente por ${durationArg}. Razón: ${reason}. (Baneado por: ${adminName})`,
             player.id,
             0x00FF00,
             "bold",
@@ -2825,9 +2847,11 @@ if (message.startsWith("!rank")) {
 
 
 if (message.startsWith("!banauth")) {
-    const pAuth = player.auth;
+    const pAuth = players[player.id];
+    const adminName = player.name;
+
     if (isAdmin(player) || loggedAdmins.includes(pAuth)) {
-        const args = message.split(" ").slice(1);
+        const args = parts.slice(1);
         // args[0] = AUTH, args[1] = duración, resto = razón
 
         if (args.length < 2) {
@@ -2841,9 +2865,9 @@ if (message.startsWith("!banauth")) {
             return false;
         }
 
-        const authValue = args[0].trim();
+        const authValue   = args[0].trim();
         const durationArg = args[1];
-        const reason = args.slice(2).join(" ").trim() || "Sin especificar";
+        const reason      = args.slice(2).join(" ").trim() || "Sin especificar";
 
         const durationMs = parseDurationToMs(durationArg);
         if (!durationMs) {
@@ -2857,10 +2881,11 @@ if (message.startsWith("!banauth")) {
             return false;
         }
 
-        addTempBanAuth(authValue, durationMs, reason);
+        // Ban temporal OFFLINE: queda guardado y se aplica al entrar
+        addTempBanAuth(authValue, durationMs, reason, adminName, "Desconocido");
 
         room.sendAnnouncement(
-            `✅ AUTH ${authValue} baneado temporalmente por ${durationArg}. Razón: ${reason}`,
+            `✅ AUTH ${authValue} ha sido baneado temporalmente por ${durationArg}. Motivo: ${reason}. (Baneado por: ${adminName})`,
             player.id,
             0x00FF00,
             "bold",
@@ -2881,10 +2906,12 @@ if (message.startsWith("!banauth")) {
 }
 
 if (message.startsWith("!tempbanlist")) {
-    const pAuth = player.auth;
+    const pAuth = players[player.id];
+    
     if (isAdmin(player) || loggedAdmins.includes(pAuth)) {
 
-        cleanExpiredTempBans(); // limpiamos antes de mostrar
+        // Limpiamos primero los que ya expiraron
+        cleanExpiredTempBans();
 
         if (!tempBans.auths || tempBans.auths.length === 0) {
             room.sendAnnouncement(
@@ -2898,10 +2925,16 @@ if (message.startsWith("!tempbanlist")) {
         }
 
         let lines = ["📋 Baneos temporales activos:\n"];
+
         tempBans.auths.forEach((ban, i) => {
             const remaining = formatRemainingTime(ban.expiresAt);
+            const auth      = ban.auth || "Desconocido";
+            const name      = ban.name || "Desconocido";
+            const by        = ban.by   || "Sistema";
+            const reason    = ban.reason || "Sin especificar";
+
             lines.push(
-                `${i}) AUTH: ${ban.auth} | Restante: ${remaining} | Por: ${ban.by || "N/A"} | Razón: ${ban.reason}`
+                `${i}) Jugador: ${name} | AUTH: ${auth} | Restante: ${remaining} | Por: ${by} | Razón: ${reason}`
             );
         });
 
@@ -2909,7 +2942,7 @@ if (message.startsWith("!tempbanlist")) {
 
         room.sendAnnouncement(
             msg,
-            player.id,
+            player.id,   // solo al admin que ejecuta; poné null si querés global
             0xFFFFFF,
             "normal",
             2
@@ -2927,7 +2960,7 @@ if (message.startsWith("!tempbanlist")) {
         return false;
     }
 }
-
+	
 if (message.startsWith("!unban")) {
     const pAuth = player.auth;
     if (isAdmin(player) || loggedAdmins.includes(pAuth)) {
