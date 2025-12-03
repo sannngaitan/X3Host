@@ -1,27 +1,31 @@
-const localStorage = require('./storage');
-
 const http = require('http');
+const HaxballJS = require('haxball.js');
+const localStorage = require('./storage');
 
 const PORT = process.env.PORT || 8080;
 
+// Servidor HTTP para que Fly no tire timeout
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('X3 Host running\n');
 });
-
 server.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 
-// HBINIT
-var room = HBInit({
+// Acá vamos a tener el room accesible globalmente
+let room;
+
+// Cargamos Haxball Headless en Node
+HaxballJS().then((HBInit) => {
+  room = HBInit({
     roomName: "🟣 X3 Thrivium (ELO + PICKS) 🟣",
     maxPlayers: 18,
     noPlayer: true,
     public: false,
-	token: "thr1.AAAAAGkvj9r7bv94nqk-PA.qMxEovhHvOQ"
+    token: process.env.HB_TOKEN, // poné tu token en Fly
     geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
-});
+  });
 
 // MAPA
 
