@@ -3,7 +3,6 @@ const HaxballJS = require('haxball.js');
 const localStorage = require('./storage');
 
 const PORT = process.env.PORT || 8080;
-console.log("Token que estoy usando:", "thr1.AAAAAGkvtC-GXXE3ku4Ljw.kXrFA_vtYzA");
 
 // Servidor HTTP para que Fly no tire timeout
 const server = http.createServer((req, res) => {
@@ -24,7 +23,7 @@ HaxballJS().then((HBInit) => {
     maxPlayers: 18,
     noPlayer: true,
     public: true,
-    token: "thr1.AAAAAGkvuJv916TGT4XJow.D8VlVxHqaLQ", // poné tu token en Fly
+    token: "thr1.AAAAAGkvuJv916TGT4XJow.D8VlVxHqaLQ",
     geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
   });
 
@@ -2297,7 +2296,8 @@ if (message.startsWith("!elo")) {
 			`[⚽] ${stats.goals} | [🎯] ${stats.assists} | [🤡] ${stats.ownGoals} | ` +
 			`[🥅] ${stats.cleanSheets}\n` +
 			`[🏆] MVPs: ${stats.mvps} | [🔥] Racha máxima: ${stats.maxWinStreak}\n` +
-			`[⭐] ELO: ${stats.elo}`,
+			`[⭐] ELO: ${stats.elo}\n` +
+			`Para ver tu progreso de rango, utiliza !rank.\n`,
 			player.id,
 			0xe7ebda,
 			"bold"
@@ -2354,7 +2354,8 @@ if (message.startsWith("!me")) {
 			`[⚽] ${stats.goals} | [🎯] ${stats.assists} | [🤡] ${stats.ownGoals} | ` +
 			`[🥅] ${stats.cleanSheets}\n` +
 			`[🏆] MVPs: ${stats.mvps} | [🔥] Racha máxima: ${stats.maxWinStreak}\n` +
-			`[⭐] ELO: ${stats.elo}`,
+			`[⭐] ELO: ${stats.elo}\n` +
+			`Para ver tu progreso de rango, utiliza !rank.`,
 			player.id,
 			0xe7ebda,
 			"bold"
@@ -2411,7 +2412,8 @@ if (message.startsWith("!stats")) {
 			`[⚽] ${stats.goals} | [🎯] ${stats.assists} | [🤡] ${stats.ownGoals} | ` +
 			`[🥅] ${stats.cleanSheets}\n` +
 			`[🏆] MVPs: ${stats.mvps} | [🔥] Racha máxima: ${stats.maxWinStreak}\n` +
-			`[⭐] ELO: ${stats.elo}`,
+			`[⭐] ELO: ${stats.elo}\n` +
+			`Para ver tu progreso de rango, utiliza !rank.`,
 			player.id,
 			0xe7ebda,
 			"bold"
