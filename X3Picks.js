@@ -24,8 +24,8 @@ HaxballJS().then((HBInit) => {
     noPlayer: true,
     public: true,
     token: "thr1.AAAAAGkvuJv916TGT4XJow.D8VlVxHqaLQ",
-    geo: { code: 'AR', lat: -34.6037, lon: -58.3816 }
-  });
+    geo: {code: "AR", lat: -36, lon:-59.9964}  
+});
 
 // MAPA
 
