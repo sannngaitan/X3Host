@@ -3922,3 +3922,4 @@ function sendAutomaticMessage() {
 }
 
 setInterval(sendAutomaticMessage, messageInterval);
+});
