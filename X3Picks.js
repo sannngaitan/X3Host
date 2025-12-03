@@ -883,7 +883,7 @@ function isAdmin(player) {
 
 function isOwner(player) {
 	let pAuth = players[player.id];
-	return pAuth === "71CQBo5iRlxArs3yznxWBAb9r2cSYHDuz1U47jmyNcY";
+	return pAuth === "Xk3ewst3hmxG20Xs5uEaWKDyi2ayUNf5TiJ3kr4W7LE";
 }
 
 function sendReplayToDiscord(replayData, scores) {
