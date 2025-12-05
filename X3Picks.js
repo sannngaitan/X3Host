@@ -273,9 +273,17 @@ const maxTeamSize = 3;
 let movingPlayer = null;
 let mutedPlayers = {};
 
-// Estructura global
 let tempBans = {
-    auths: [] // { auth, expiresAt, reason }
+    auths: [
+        // {
+        //   auth: "XXXXXXXX",
+        //   name: "Pepito",
+        //   expiresAt: 0,
+        //   reason: "Flood",
+        //   by: "Admin",
+        //   hostBanId: null // id del jugador usado en room.kickPlayer(..., true)
+        // }
+    ]
 };
 
 function loadTempBans() {
@@ -488,7 +496,25 @@ function parseDurationToMs(token) {
 // Elimina bans expirados
 function cleanExpiredTempBans() {
     const now = Date.now();
-    tempBans.auths = tempBans.auths.filter(b => b.expiresAt > now);
+
+    if (!tempBans.auths) return;
+
+    tempBans.auths = tempBans.auths.filter(ban => {
+        if (ban.expiresAt <= now) {
+            // Si teníamos un ban interno registrado, lo limpiamos
+            if (ban.hostBanId != null) {
+                try {
+                    room.clearBan(ban.hostBanId);
+                } catch (e) {
+                    // por si el host se reinició y el id ya no existe
+                }
+            }
+            return false; // lo sacamos del array
+        }
+        return true; // se mantiene activo
+    });
+
+    saveTempBans();
 }
 
 // Agregar un ban temporal por AUTH
@@ -502,13 +528,15 @@ function addTempBanAuth(auth, durationMs, reason, byAdmin, playerName) {
         existing.reason    = reason;
         existing.by        = byAdmin;
         existing.name      = playerName || existing.name || "Desconocido";
+        // NO tocamos hostBanId acá, se setea cuando efectivamente lo baneamos en el host
     } else {
         tempBans.auths.push({
             auth,
             name: playerName || "Desconocido",
             expiresAt,
             reason,
-            by: byAdmin || "Sistema"
+            by: byAdmin || "Sistema",
+            hostBanId: null
         });
     }
 
@@ -1380,26 +1408,62 @@ function startMidGamePick(teamNeedingPick) {
 room.onPlayerJoin = function(player) {
 	players[player.id] = player.auth;
 
+	const auth = player.auth || "Desconocido";
+    const ip = player.conn || "Desconocida";
+
 	let pAuth = players[player.id];
 
 	const MAX_SLOTS = 17;
     const currentPlayers = room.getPlayerList().length;
 
-    // Limpiamos expirados
-    cleanExpiredTempBans();
+	// Buscar en blacklist por AUTH e IP
+const blAuth = blacklist.auths.find(e => e.value === auth);
+const blIp   = blacklist.ips.find(e => e.value === ip);
 
-    const ban = tempBans.auths.find(b => b.auth === player.auth);
-
-    if (ban) {
-        const restanteMs = ban.expiresAt - Date.now();
-        const restanteMin = Math.max(1, Math.round(restanteMs / 60000));
-        room.kickPlayer(
-            player.id,
-            `Sigues temporalmente baneado. Motivo: ${ban.reason}. Tiempo restante aprox: ${restanteMin} min.`,
-            true
-        );
-        return;
+if (blAuth || blIp) {
+    // Actualizamos nombre e ID en las entradas que correspondan
+    if (blAuth) {
+        blAuth.lastName  = player.name;
+        blAuth.hostBanId = player.id;
     }
+    if (blIp) {
+        blIp.lastName  = player.name;
+        blIp.hostBanId = player.id;
+    }
+    saveBlacklist();
+
+    const reasonText = (blAuth?.reason || blIp?.reason || "Sin especificar");
+
+    room.kickPlayer(
+        player.id,
+        `Estás en la lista negra.\nRazón: ${reasonText}`,
+        true // ban interno de Haxball
+    );
+    return;
+}
+
+cleanExpiredTempBans(); // la actualizamos (te la rehago abajo)
+
+const tempBan = tempBans.auths.find(b => b.auth === player.auth);
+
+if (tempBan) {
+    // Actualizar nombre e ID si no los teníamos
+    if (!tempBan.name || tempBan.name === "Desconocido") {
+        tempBan.name = player.name;
+    }
+    tempBan.hostBanId = player.id;
+    saveTempBans();
+
+    const restanteMs  = tempBan.expiresAt - Date.now();
+    const restanteMin = Math.max(1, Math.round(restanteMs / 60000));
+
+    room.kickPlayer(
+        player.id,
+        `Sigues temporalmente baneado.\nMotivo: ${tempBan.reason}\nBaneado por: ${tempBan.by}\nTiempo restante aprox: ${restanteMin} min.`,
+        true // ban interno
+    );
+    return;
+}
 
 	Players_team[0].push(player.id);
 
@@ -1446,22 +1510,12 @@ room.onPlayerJoin = function(player) {
 			}
 		}
     }
-
-	const auth = player.auth || "Desconocido";
-    const ip = player.conn || "Desconocida";
 	
     sendWebhook(
         entryExitWebhookURL,
         `El jugador \`${player.name}\` ha ingresado.\n**AUTH**: \`${auth}\`\n**IP**: \`${ip}\`\n**ID**: ${player.id}`
     );
 
-	const isAuthBlacklisted = blacklist.auths.some(entry => entry.value === auth);
-	const isIpBlacklisted = blacklist.ips.some(entry => entry.value === ip);
-	
-	if (isAuthBlacklisted || isIpBlacklisted) {
-		room.kickPlayer(player.id, "Estás en la lista negra, bobo.", true);
-		return;
-	}
 	let playerAuthjoin = players[player.id];
 
 	if(player.name === " " || player.name === "" || player.name === "    "){
@@ -3026,6 +3080,12 @@ if (message.startsWith("!unban")) {
 
         saveTempBans();
 
+		if (removedBan.hostBanId != null) {
+    try {
+        room.clearBan(removedBan.hostBanId);
+    } catch (e) {}
+}
+
         room.sendAnnouncement(
             `✅ Se ha desbaneado el AUTH ${removedBan.auth}. Razón original: ${removedBan.reason}`,
             player.id,
@@ -3052,6 +3112,72 @@ if (message.startsWith("!unban")) {
 		if(isAdmin(player) || loggedAdmins.includes(pAuth)) {
         const args = message.split(" ").slice(1); // Separar los argumentos
         const command = args[0]; // Subcomando (e.g., "add", "remove", "list")
+
+			if (args[0].startsWith("@")) {
+            const rawName    = args[0].slice(1);
+            const targetName = rawName.toLowerCase().replace(/_/g, " ");
+
+            const target = room.getPlayerList().find(p =>
+                p.name.toLowerCase() === targetName
+            );
+
+            if (!target) {
+                room.sendAnnouncement(
+                    `⚠️ Jugador ${targetName} no encontrado.`,
+                    player.id,
+                    0xFFFF00,
+                    "italic",
+                    2
+                );
+                return false;
+            }
+
+            if (!target.auth) {
+                room.sendAnnouncement(
+                    "⚠️ No se pudo obtener el AUTH del jugador.",
+                    player.id,
+                    0xFFFF00,
+                    "italic",
+                    2
+                );
+                return false;
+            }
+
+            const reason = args.slice(1).join(" ").trim() || "Sin especificar";
+
+            // Ver si ya estaba en blacklist
+            const existing = blacklist.auths.find(entry => entry.value === target.auth);
+            if (!existing) {
+                blacklist.auths.push({
+                    value: target.auth,
+                    reason,
+                    hostBanId: target.id,
+                    lastName: target.name
+                });
+            } else {
+                existing.reason   = reason;
+                existing.hostBanId = target.id;
+                existing.lastName  = target.name;
+            }
+
+            saveBlacklist();
+
+            room.kickPlayer(
+                target.id,
+                `Has sido añadido a la blacklist.\nRazón: ${reason}`,
+                true // ban interno
+            );
+
+            room.sendAnnouncement(
+                `✅ Jugador ${target.name} (AUTH: ${target.auth}) añadido a la blacklist. Razón: ${reason}`,
+                player.id,
+                0x00FF00,
+                "bold",
+                2
+            );
+
+            return false;
+        }
 
         switch (command) {
             case "add":
@@ -3140,20 +3266,28 @@ if (message.startsWith("!unban")) {
                     return false;
                 }
 
-                const removeCategory = blacklist[removeType + "s"]; // 'auths' o 'ips'
-                const index = removeCategory.findIndex(entry => entry.value === removeValue);
+				const removeCategory = blacklist[removeType + "s"]; // 'auths' o 'ips'
+				const index = removeCategory.findIndex(entry => entry.value === removeValue);
 
-                if (index !== -1) {
-                    removeCategory.splice(index, 1);
-                    saveBlacklist();
-                    room.sendAnnouncement(
-                        `✅ ${removeType.toUpperCase()} ${removeValue} ha sido eliminado de la blacklist.`,
-                        player.id,
-                        0x00FF00,
-                        "bold",
-                        2
-                    );
-                } else {
+				if (index !== -1) {
+    				const [removed] = removeCategory.splice(index, 1);
+    				saveBlacklist();
+
+    				// Si ese usuario alguna vez entró y lo baneamos internamente…
+    				if (removed.hostBanId != null) {
+        			try {
+            			room.clearBan(removed.hostBanId);
+        				} catch (e) {}
+    				}
+
+    				room.sendAnnouncement(
+        			`✅ ${removeType.toUpperCase()} ${removeValue} ha sido eliminado de la blacklist.`,
+        			player.id,
+        			0x00FF00,
+        			"bold",
+        			2
+    				);
+					} else {
                     room.sendAnnouncement(
                         `⚠️ ${removeType.toUpperCase()} ${removeValue} no está en la blacklist.`,
                         player.id,
