@@ -1219,7 +1219,7 @@ function announcePickList(targetId) {
 
     let msg = `[PICKS] Jugadores disponibles (necesitas ${slotsNeeded}):\n`;
     specs.forEach((p, idx) => {
-        msg += `${idx + 1}) ${p.name}\n`;
+        msg += `${idx + 1}. ${p.name}\n`;
     });
 
     room.sendAnnouncement(msg, targetId ?? null, 0xFFFFFF, "normal", 2);
